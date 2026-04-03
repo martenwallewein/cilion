@@ -9,7 +9,8 @@
 - [ ] **Install eBPF Toolchain:**
   - Install `clang`, `llvm`, `libbpf-dev`, and `bpftool` on your Linux development machine.
 - [ ] **Setup KinD (Kubernetes in Docker):**
-  - Write a bash script (`test/kind/setup.sh`) to spin up two local KinD clusters (Cluster A and Cluster B) without a default CNI (`disableDefaultCNI: true`).
+  - Write a bash script (`test/kind/setup.sh`) to spin up two local KinD clusters (Cluster A and Cluster B). 
+  - **Note:** Leave the default CNI (`kindnet`) enabled so it can handle IPAM and local `veth` wiring. CilION will run as an overlay on top of it.
 - [ ] **Setup Local SCION Topology:**
   - Clone the official `scion-proto/scion` repository.
   - Run their local topology generator to create a simulated 3-AS network on your host machine.
@@ -33,7 +34,7 @@
 - [ ] **Write XDP Ingress Program (`bpf/xdp_ingress.c`):**
   - Intercept UDP port 30041.
   - Strip the outer IP, UDP, and SCION headers using `bpf_xdp_adjust_head()`.
-  - Pass the inner IP packet up the stack.
+  - Pass the inner IP packet up the stack to the base CNI.
 - [ ] **Manual Testing:**
   - Load the eBPF programs manually via `bpftool` or `tc` CLI onto a `veth` interface.
   - Ping from a pod, capture traffic with `tcpdump`, and verify the SCION header is correctly formed.
@@ -44,11 +45,11 @@
 - [ ] **Generate eBPF Go Bindings:**
   - Use the `cilium/ebpf/cmd/bpf2go` tool to automatically generate Go code from your `tc_egress.c` and `xdp_ingress.c` files.
 - [ ] **Initialize the CilION Agent (`cmd/cilion-agent`):**
-  - Write the startup logic to attach the TC eBPF program to pod `veth` interfaces as they are created.
+  - Write the startup logic to watch for `veth` interfaces created by the base CNI and attach the TC eBPF program to them.
   - Attach the XDP program to the host's physical interface (`eth0`).
 - [ ] **Build the Kubernetes Controller (`pkg/controller`):**
   - Use `controller-runtime` (or raw `client-go`) to watch the Kubernetes API for `Pod` creations/deletions.
-  - When a Pod is created, push its IP and a default Policy ID into the `pod_policy_map` via Go.
+  - When a Pod is assigned an IP, push its IP and a default Policy ID into the `pod_policy_map` via Go.
 - [ ] **Create the CRDs (`api/v1alpha1`):**
   - Define the `ScionLink` and `ScionPathPolicy` structs.
   - Generate the Kubernetes CRD manifests.
