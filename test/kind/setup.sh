@@ -4,14 +4,18 @@ set -euo pipefail
 CLUSTER_A="cilion-a"
 CLUSTER_B="cilion-b"
 
-# KinD cluster config: single control-plane node, default CNI (kindnet) left intact
-KIND_CONFIG=$(cat <<'EOF'
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-networking:
-  disableDefaultCNI: false
-EOF
-)
+# Pin a known-stable version of Kubernetes.
+# This prevents `kind` from trying to use experimental tags like v1.35.1
+NODE_IMAGE="kindest/node:v1.30.0"
+
+down() {
+  for cluster in "${CLUSTER_A}" "${CLUSTER_B}"; do
+    if kind get clusters 2>/dev/null | grep -q "^${cluster}$"; then
+      echo "Deleting existing cluster '${cluster}'..."
+      kind delete cluster --name "${cluster}"
+    fi
+  done
+}
 
 spin_up() {
   local name=$1
@@ -24,9 +28,19 @@ spin_up() {
   fi
 
   echo "Creating cluster '${name}' (pods: ${pod_subnet}, services: ${svc_subnet})..."
-  echo "${KIND_CONFIG}" \
-    | sed "s|networking:|networking:\n  podSubnet: \"${pod_subnet}\"\n  serviceSubnet: \"${svc_subnet}\"|" \
-    | kind create cluster --name "${name}" --config -
+  
+  # Use a dynamic heredoc to safely inject bash variables into the YAML
+  cat <<EOF | kind create cluster --name "${name}" --config -
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    image: ${NODE_IMAGE}
+networking:
+  disableDefaultCNI: false
+  podSubnet: "${pod_subnet}"
+  serviceSubnet: "${svc_subnet}"
+EOF
 
   echo "Cluster '${name}' ready."
 }
