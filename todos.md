@@ -3,7 +3,7 @@
 ## Phase 1: Environment Setup & Scaffolding
 *Goal: Get the basic tools installed and a simulated environment running.*
 
-- [ ] **Initialize the Project:**
+- [x] **Initialize the Project:**
   - Run `go mod init github.com/yourusername/cilion`.
   - Create the directory structure outlined in the project architecture.
 - [ ] **Install eBPF Toolchain:**
