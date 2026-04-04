@@ -6,13 +6,13 @@
 - [x] **Initialize the Project:**
   - Run `go mod init github.com/yourusername/cilion`.
   - Create the directory structure outlined in the project architecture.
-- [ ] **Install eBPF Toolchain:**
+- [x] **Install eBPF Toolchain:**
   - Install `clang`, `llvm`, `libbpf-dev`, and `bpftool` on your Linux development machine.
 - [ ] **Setup KinD (Kubernetes in Docker):**
   - Write a bash script (`test/kind/setup.sh`) to spin up two local KinD clusters (Cluster A and Cluster B). 
   - **Note:** Leave the default CNI (`kindnet`) enabled so it can handle IPAM and local `veth` wiring. CilION will run as an overlay on top of it.
 - [ ] **Setup Local SCION Topology:**
-  - Clone the official `scion-proto/scion` repository.
+  - Clone the official `scion-proto/scion` repository. Add as submodule.
   - Run their local topology generator to create a simulated 3-AS network on your host machine.
 - [ ] **Makefile eBPF Compilation:**
   - Write a `Makefile` target that uses `clang -O2 -target bpf` to compile `bpf/tc_egress.c` into `bpf/tc_egress.o`.
