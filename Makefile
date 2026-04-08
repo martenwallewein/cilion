@@ -1,6 +1,7 @@
 .PHONY: install
 
 install:
+	
 	apt-get install -y clang llvm libbpf-dev linux-tools-$(shell uname -r)
 	# Docker
 	if ! command -v docker >/dev/null 2>&1; then \
@@ -16,3 +17,6 @@ install:
 	curl -Lo /usr/local/bin/kubectl \
 		"https://dl.k8s.io/release/$$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
 	chmod +x /usr/local/bin/kubectl
+	bash install-cilium.sh
+	
+
