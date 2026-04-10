@@ -8,7 +8,7 @@
   - Create the directory structure outlined in the project architecture.
 - [x] **Install eBPF Toolchain:**
   - Install `clang`, `llvm`, `libbpf-dev`, and `bpftool` on your Linux development machine.
-- [ ] **Setup KinD (Kubernetes in Docker):**
+- [x] **Setup KinD (Kubernetes in Docker):**
   - Write a bash script (`test/kind/setup.sh`) to spin up two local KinD clusters (Cluster A and Cluster B). 
   - **Note:** Leave the default CNI (`kindnet`) enabled so it can handle IPAM and local `veth` wiring. CilION will run as an overlay on top of it.
 - [ ] **Setup Local SCION Topology:**
