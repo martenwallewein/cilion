@@ -10,7 +10,7 @@ Traditionally, a K8s CNI hands packets off to the host's default gateway, treati
 CilION flips this paradigm. By turning every Kubernetes worker node into a distributed **SCION Border Router (BR)** via eBPF, CilION empowers the cluster to actively participate in global routing. It allows Kubernetes administrators to cryptographically dictate the exact physical ISPs and geographic paths their inter-cluster traffic will take, directly mapped to application labels.
 
 ## Architecture
-
+![Cilion WAN and Local Architecture Overview](docs/cilion-architecture.svg "Cilion WAN and Local Architecture Overview")
 
 ## Why CilION?
 *   **BGP-Bypass:** Inter-cluster traffic paths are explicitly defined by eBPF. The underlay internet (BGP) is only used as a link-local hop to reach the SCION network, rendering your traffic immune to BGP hijacks and routing leaks.
