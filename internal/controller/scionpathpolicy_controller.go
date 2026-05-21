@@ -237,5 +237,4 @@ func (r *ScionPathPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Named("global-scion-policy-controller").
 		Complete(r)
 
-	return nil
 }

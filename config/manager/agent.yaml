@@ -1,0 +1,67 @@
+# config/manager/agent.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cilion-agent
+  namespace: system
+  labels:
+    control-plane: cilion-agent
+    app.kubernetes.io/name: cilion
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  selector:
+    matchLabels:
+      control-plane: cilion-agent
+      app.kubernetes.io/name: cilion
+  template:
+    metadata:
+      labels:
+        control-plane: cilion-agent
+        app.kubernetes.io/name: cilion
+    spec:
+      hostNetwork: true # CRUCIAL: Required to attach eBPF to the host's physical interfaces
+      serviceAccountName: controller-manager # Reusing the operator's SA for simplicity
+      tolerations:
+        - operator: Exists # Ensures it runs on ALL nodes (even control-plane nodes)
+      containers:
+        - command:
+            - /manager
+          args:
+            - --mode=agent
+            - --health-probe-bind-address=:8082 # Port 8082 to avoid collision with Operator if on same node
+          image: controller:latest
+          name: agent
+          env:
+            - name: NODE_NAME # CRUCIAL: Used by the Go cache to filter pods
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          securityContext:
+            privileged: true # CRUCIAL: Required to load eBPF programs into the kernel
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8082
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8082
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: bpf-maps
+              mountPath: /sys/fs/bpf
+              mountPropagation: Bidirectional
+            - name: kernel-modules
+              mountPath: /lib/modules
+              readOnly: true
+      volumes:
+        - name: bpf-maps
+          hostPath:
+            path: /sys/fs/bpf
+            type: DirectoryOrCreate
+        - name: kernel-modules
+          hostPath:
+            path: /lib/modules
