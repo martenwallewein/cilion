@@ -1,5 +1,3 @@
-# 🛠️ Architecture & Technical Specification
-
 ## 1. System Architecture
 
 CilION relies on a strict separation of concerns, splitting the control plane to prevent "thundering herd" API calls, and positioning its eBPF datapath directly beneath the primary CNI (Cilium) as an **Underlay Interceptor**. The cluster acts as a single SCION Edge Autonomous System (Stub AS).
@@ -7,26 +5,24 @@ CilION relies on a strict separation of concerns, splitting the control plane to
 ### 1.1. The Control Plane (Operator & Agent)
 Following the "Cilium Way," the control plane is split into two distinct components synchronized entirely via Kubernetes CRDs:
 
-*   **The Global Controller (Deployment):** The "brain" of the cluster. It watches user-created intent CRDs (`ScionPathPolicy`). It is the *only* component that communicates with the global SCION Control Service (CS). It fetches valid cryptographic paths (Hop Fields) and saves them back to the K8s API as internal state CRDs (`ScionComputedPath`).
-*   **The Local Node Agent (DaemonSet):** Deployed as a privileged container on every worker node. It monitors local Pod scheduling and watches the `ScionComputedPath` CRDs. It has zero knowledge of the external SCION network; it simply reads the pre-computed raw byte arrays from the K8s API and injects them into the host OS's eBPF maps.
+*   **The Global Controller (Deployment):** The "brain" of the cluster. It watches user-created intent CRDs (`ScionPathPolicy`). It is the *only* component that communicates with the global SCION Control Service (CS). It resolves Kubernetes label selectors to **Cilium Identities**, fetches valid cryptographic paths (Hop Fields), and saves them back to the K8s API as internal state CRDs (`ScionComputedPath`).
+*   **The Local Node Agent (DaemonSet):** Deployed as a privileged container on every worker node. It watches the `ScionComputedPath` CRDs and populates local eBPF maps. Because routing is tied to Cilium Identities rather than Pod IPs, the Node Agent **does not need to monitor Pod scheduling events**, drastically reducing CPU overhead and completely eliminating map churn during application scaling.
 
 ### 1.2. The Data Plane (Native Routing & eBPF)
 To enable Application-Aware WAN routing without fighting the primary CNI, CilION requires the cluster to run in **Native Routing Mode** (e.g., Cilium with VXLAN/Geneve disabled).
 
-*   **The Handoff:** Cilium processes local L3-L7 Network Policies at the Pod's `veth` interface and routes the cross-cluster traffic out to the Linux kernel in *cleartext* (unencapsulated).
-*   **Egress (TC eXpress / tc Hook on Physical NIC):** CilION intercepts the standard IP packets exactly as they enter the physical interface (e.g., `eth0` or `enp7s0`). It reads the cleartext Pod IP, performs a map lookup to find the computed SCION path, applies the SCION-over-UDP encapsulation, and routes it to the transit provider.
-*   **Ingress (XDP Hook on Physical NIC):** Intercepts incoming SCION-over-UDP WAN traffic at the NIC driver level. The eBPF program verifies the SCION MAC, strips the SCION headers completely, and passes the pristine inner IP packet up the Linux stack, where Cilium unknowingly takes over for local delivery.
-
----
+*   **The Handoff:** Cilium processes local L3-L7 Network Policies at the Pod's `veth` interface, attaches the **Cilium Security Identity** to the packet metadata (e.g., `skb->mark`), and routes the cross-cluster traffic out to the Linux kernel in *cleartext*.
+*   **Egress (TC eXpress / tc Hook on Physical NIC):** CilION intercepts standard IP packets exactly as they enter the physical interface (`eth0`). It reads the Cilium ID and Destination IP, executes a multi-tiered map lookup to find the computed SCION path, applies the SCION-over-UDP encapsulation, and routes it to the transit provider.
+*   **Ingress (XDP Hook on Physical NIC):** Intercepts incoming SCION-over-UDP WAN traffic at the NIC driver level. The eBPF program verifies the SCION MAC, strips the SCION headers completely, and passes the pristine inner IP packet up the Linux stack.
 
 ## 2. The Network Datapath (SCION Overlay)
 
 Because public cloud providers do not yet route native SCION Ethernet frames, CilION utilizes a **SCION-over-UDP/IP Overlay** for the WAN transit. 
 
 ### Packet Walkthrough (Egress)
-1.  **Pod Payload:** Pod A (`10.244.1.5`) sends a standard TCP packet to remote Pod B (`10.244.2.10`).
-2.  **Cilium Processing:** Cilium's local eBPF program evaluates zero-trust policies, allows the packet, and hands it to the Linux routing table unencrypted.
-3.  **eBPF Underlay Interception:** The packet hits `eth0`. CilION's `tc` program catches it. A map lookup on the Source IP (`10.244.1.5`) determines this Pod requires a high-throughput SCION path.
+1.  **Pod Payload:** Pod A (`app=billing`) sends a standard TCP packet to remote Pod B.
+2.  **Cilium Processing:** Cilium evaluates zero-trust policies, allows the packet, attaches the Cilium ID (e.g., `888`) to `skb->mark`, and hands it to the Linux routing table unencrypted.
+3.  **eBPF Underlay Interception:** The packet hits `eth0`. CilION's `tc` program catches it. It extracts the Destination IP and the Cilium ID `888`. A highly optimized O(1) matrix lookup determines this specific application requires a high-throughput, geo-fenced SCION path.
 4.  **Encapsulation:** The eBPF program uses `bpf_skb_adjust_room()` to push new headers onto the packet:
     ```text
     [ Outer IPv4 (Host Node -> Transit ISP IP) ] 
@@ -36,24 +32,54 @@ Because public cloud providers do not yet route native SCION Ethernet frames, Ci
     [ Original Cleartext IP Packet (Pod A -> Pod B) ]
     ```
 5.  **Transit Hand-off:** The packet leaves the host node. The Outer IPv4 ensures it routes over standard BGP *only until* it hits the SCION Transit Provider (Core AS). 
-6.  **Core Routing:** The Transit Provider receives it, ignores BGP, and forwards the packet globally based purely on the immutable SCION Path Header.
 
 ---
 
-## 3. eBPF Map Structures
+## 3. eBPF Map Structures & Datapath Logic
 
-To perform encapsulation at line rate without user-space context switching, the Local Agent populates highly optimized eBPF maps.
+To support both **Global** (Cluster-to-Cluster) and **Per-App-Type** (Label-to-Cluster) routing paradigms without falling into an O(N * M) scaling trap, CilION utilizes a simplified 3-tier map architecture. 
+
+By leveraging native Cilium Identities, the datapath is completely decoupled from individual Pod IPs.
+
+### 3.1. The Three-Map Architecture
+
+1.  **Destination Map (`map_dest_cluster`):** An LPM (Longest Prefix Match) Trie that maps remote subnets to a logical `Cluster_ID`.
+2.  **Policy Matrix (`map_policy_matrix`):** A Hash map that combines the "Who" (Cilium ID) and the "Where" (Cluster ID) to resolve a `Path_ID`.
+3.  **SCION Path Cache (`map_scion_paths`):** A Hash map storing the pre-computed, raw byte-arrays of the SCION headers.
+
+### 3.2. Datapath Execution Logic
+When a packet hits the `tc` egress hook, the eBPF program performs a fast, cascading lookup:
+1.  **Destination Lookup:** LPM match on Dest IP. If matched, returns `Cluster_ID`.
+2.  **Per-App Lookup:** Query the Policy Matrix with `{Cilium_ID, Cluster_ID}`.
+3.  **Global Fallback:** If the Per-App query misses, query the matrix again with `{0, Cluster_ID}` (where `0` is the default global identity).
+4.  **Encapsulate:** Fetch the SCION headers using the resulting `Path_ID`.
+
+### 3.3. eBPF C Implementation (Definitions)
 
 ```c
-// Maps Local Pod IPs to specific routing constraint profiles (App-Aware Routing)
-struct bpf_map_def SEC("maps") pod_policy_map = {
-    .type = BPF_MAP_TYPE_HASH,
-    .key_size = sizeof(__u32),   // Pod IPv4 Address (e.g., 10.244.1.5)
-    .value_size = sizeof(__u32), // Policy ID
-    .max_entries = 10000,
+// 1. Maps remote subnets to a logical Cluster ID (LPM Trie)
+struct bpf_map_def SEC("maps") map_dest_cluster = {
+    .type = BPF_MAP_TYPE_LPM_TRIE,
+    .key_size = sizeof(struct bpf_lpm_trie_key) + 4, // IPv4 CIDR
+    .value_size = sizeof(__u32),                     // Cluster ID
+    .max_entries = 1024,
+    .map_flags = BPF_F_NO_PREALLOC,
 };
 
-// Caches pre-computed SCION Path Headers generated by the Global Controller
+// 2. Maps {Cilium ID, Cluster ID} to a SCION Path ID
+struct policy_key {
+    __u32 cilium_id;
+    __u32 cluster_id;
+};
+
+struct bpf_map_def SEC("maps") map_policy_matrix = {
+    .type = BPF_MAP_TYPE_HASH,
+    .key_size = sizeof(struct policy_key),
+    .value_size = sizeof(__u32), // Path ID
+    .max_entries = 65535,
+};
+
+// 3. Caches pre-computed SCION Path Headers generated by the Global Controller
 struct scion_path_entry {
     __u32 next_hop_ip;      // IP of the SCION Core AS Router
     __u8  next_hop_mac[6];  // Next hop MAC (for L2 underlays)
@@ -62,15 +88,13 @@ struct scion_path_entry {
     __u8  mac_key[16];      // Symmetric key for fast AES-MAC validation
 };
 
-struct bpf_map_def SEC("maps") scion_path_cache = {
+struct bpf_map_def SEC("maps") map_scion_paths = {
     .type = BPF_MAP_TYPE_HASH,
-    .key_size = sizeof(__u32), // Policy ID
+    .key_size = sizeof(__u32), // Path ID
     .value_size = sizeof(struct scion_path_entry),
     .max_entries = 1024,
 };
 ```
-
----
 
 ## 4. Custom Resource Definitions (CRDs)
 
