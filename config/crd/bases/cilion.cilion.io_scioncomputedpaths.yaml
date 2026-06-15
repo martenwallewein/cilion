@@ -58,7 +58,6 @@ spec:
                 type: string
             required:
             - destinationCidr
-            - hopFields
             - nextHopIP
             - policyRef
             type: object
@@ -125,7 +124,6 @@ spec:
         required:
         - metadata
         - spec
-        - status
         type: object
     served: true
     storage: true

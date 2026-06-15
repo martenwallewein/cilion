@@ -145,7 +145,7 @@ func (r *ScionPathPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// 7. Update Status on the user's Policy CRD
 	apimeta.SetStatusCondition(&policy.Status.Conditions, metav1.Condition{
-		Type:               "Ready",
+		Type:               "Active",
 		Status:             metav1.ConditionTrue,
 		Reason:             "PathsComputed",
 		Message:            fmt.Sprintf("Computed paths for %d destinations", len(peers.Items)),

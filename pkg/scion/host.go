@@ -146,10 +146,11 @@ func defaultLocalAddr(local netaddr.IPPort) (netaddr.IPPort, error) {
 }
 
 func (h *hostContext) queryPaths(ctx context.Context, dst addr.IA) ([]snet.Path, error) {
-	flags := daemon.PathReqFlags{Refresh: false, Hidden: false}
+	/*flags := daemon.PathReqFlags{Refresh: false, Hidden: false}
 	snetPaths, err := h.sciond.Paths(ctx, addr.IA(dst), 0, flags)
 	if err != nil {
 		return nil, err
 	}
-	return snetPaths, nil
+	return snetPaths, nil*/
+	return nil, nil
 }

@@ -16,7 +16,8 @@ type ScionComputedPathSpec struct {
 	NextHopIP string `json:"nextHopIP"`
 
 	// HopFields contains the raw byte array of the SCION cryptographic path for eBPF
-	HopFields []byte `json:"hopFields"`
+	// +optional
+	HopFields []byte `json:"hopFields,omitempty"`
 }
 
 // ScionComputedPathStatus defines the observed state of ScionComputedPath
@@ -33,8 +34,10 @@ type ScionComputedPath struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitzero"`
 
-	Spec   ScionComputedPathSpec   `json:"spec"`
-	Status ScionComputedPathStatus `json:"status,omitzero"`
+	Spec ScionComputedPathSpec `json:"spec"`
+
+	// +optional
+	Status ScionComputedPathStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

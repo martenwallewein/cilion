@@ -27,8 +27,10 @@ type ScionClusterPeer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitzero"`
 
-	Spec   ScionClusterPeerSpec   `json:"spec"`
-	Status ScionClusterPeerStatus `json:"status,omitzero"`
+	Spec ScionClusterPeerSpec `json:"spec"`
+
+	// +optional
+	Status ScionClusterPeerStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
