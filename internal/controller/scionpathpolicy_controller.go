@@ -232,7 +232,19 @@ func (r *ScionPathPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// 3. Watch Remote Destinations (if a new cluster is added, recalculate all policies!)
 		Watches(
 			&cilionv1alpha1.ScionClusterPeer{},
-			&handler.EnqueueRequestForObject{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				var policies cilionv1alpha1.ScionPathPolicyList
+				if err := r.Client.List(ctx, &policies); err != nil {
+					return nil
+				}
+				requests := make([]reconcile.Request, len(policies.Items))
+				for i, p := range policies.Items {
+					requests[i] = reconcile.Request{
+						NamespacedName: types.NamespacedName{Name: p.Name, Namespace: p.Namespace},
+					}
+				}
+				return requests
+			}),
 		).
 		Named("global-scion-policy-controller").
 		Complete(r)

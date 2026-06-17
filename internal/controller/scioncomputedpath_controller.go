@@ -51,6 +51,7 @@ func (r *ScionComputedPathReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// TODO(user): your logic here
 
+	// Here we will do ebpf injection based on computed path resources
 	return ctrl.Result{}, nil
 }
 
