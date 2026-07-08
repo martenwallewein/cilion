@@ -1,6 +1,8 @@
 package scion
 
 import (
+	"context"
+
 	"github.com/scionproto/scion/pkg/snet"
 )
 
@@ -14,8 +16,8 @@ func NewPathCache() *PathCache {
 	}
 }
 
-func (pc *PathCache) Refresh(remote *snet.UDPAddr) error {
-	paths, err := QueryPaths(remote.IA)
+func (pc *PathCache) Refresh(ctx context.Context, remote *snet.UDPAddr) error {
+	paths, err := QueryPaths(ctx, remote.IA)
 	if err != nil {
 		return nil
 	}
@@ -24,9 +26,8 @@ func (pc *PathCache) Refresh(remote *snet.UDPAddr) error {
 	return nil
 }
 
-// TODO: Add expiration time
-func (pc *PathCache) Get(remote *snet.UDPAddr) ([]SCIONPath, error) {
-	if err := pc.Refresh(remote); err != nil {
+func (pc *PathCache) Get(ctx context.Context, remote *snet.UDPAddr) ([]SCIONPath, error) {
+	if err := pc.Refresh(ctx, remote); err != nil {
 		return nil, err
 	}
 

@@ -48,9 +48,9 @@ func IdFromSnetPath(path snet.Path) string {
 	return s
 }
 
-func QueryRawPaths(remote addr.IA) ([]snet.Path, error) {
+func QueryRawPaths(ctx context.Context, remote addr.IA) ([]snet.Path, error) {
 	hc := host()
-	return hc.queryPaths(context.Background(), remote)
+	return hc.queryPaths(ctx, remote)
 }
 
 func stringToUint64(input string) uint64 {
@@ -86,9 +86,9 @@ func (p *SCIONPath) GetFirstHop() string {
 	return firstHopIA.String()
 }
 
-func QueryPaths(remote addr.IA) ([]SCIONPath, error) {
+func QueryPaths(ctx context.Context, remote addr.IA) ([]SCIONPath, error) {
 	hc := host()
-	paths, err := hc.queryPaths(context.Background(), remote)
+	paths, err := hc.queryPaths(ctx, remote)
 	if err != nil {
 		return nil, err
 	}
