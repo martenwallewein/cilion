@@ -25,12 +25,14 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	cilionv1alpha1 "github.com/martenwallewein/cilion/api/v1alpha1"
+	"github.com/martenwallewein/cilion/internal/bpf"
 )
 
 // ScionComputedPathReconciler reconciles a ScionComputedPath object
 type ScionComputedPathReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme      *runtime.Scheme
+	ebpfManager *bpf.EbpfManager
 }
 
 // +kubebuilder:rbac:groups=cilion.cilion.io,resources=scioncomputedpaths,verbs=get;list;watch;create;update;patch;delete
